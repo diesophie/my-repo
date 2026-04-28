@@ -1,0 +1,751 @@
+---
+title: "corpus study"
+format: html
+editor: visual
+---
+# WEISST EH
+
+fargene:
+https://r-charts.com/colors/
+
+## Setting up workingdirectory and packages
+
+```{r, set up}
+
+# just run this code chunk
+# function to ignoring the setting of the relative path below when knitting
+run_if_not_knitting <- function(expr) {
+  if (!isTRUE(getOption("knitr.in.progress"))) {
+    eval(expr)
+  }
+}
+
+# nifty code using the pacman package
+# it checks if the packages specified below are installed, if not, 
+#they will be installed, if yes, they will be loaded
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(dplyr, rstudioapi, tidyverse, bayesrules,
+               tidybayes, trimr, brms, bayesplot, bayestestR, modelr, lme4)
+
+# set the current working directory to the one where this file is
+run_if_not_knitting(current_working_dir <- dirname(rstudioapi::getActiveDocumentContext()$path))
+run_if_not_knitting(setwd(current_working_dir))
+```
+
+# Corpus study - loading data and prepare it
+
+```{r, loading data}
+#| echo: false 
+# loading the data
+corpus_raw <- read_delim('tryout.txt', delim = '\t')
+
+corpus <- corpus_raw |>
+  mutate(word_form = as.factor(word_form),
+         country_corpus = as.factor(country_corpus))
+levels(corpus$word_form)
+
+# removing columns not used
+#corpus <- corpus
+
+
+
+```
+
+Code book:
+
+**full** = complete text of each hit in the corpus including the citation
+
+**word form** = showing the conjugation of the verb and whether the phrase includes the particle *ja* or not
+
+**reference** = the name of the newspaper/original source
+
+**first part of reference** = the abreviation of the original source 
+
+**several hits** = 
+
+**country (corpus)** = 
+
+**speakers nasjonality** = 
+
+**comments** = 
+
+**sentence** = 
+
+**sentence type** = 
+
+**obligatory** = 
+
+**discourse marker** = 
+
+**sentence (position)** = 
+
+**clause (position)** = 
+
+**position** = 
+
+**with conjunction** = 
+
+**conjunction** = 
+
+**in total** =
+
+## descriptive statistics
+
+### word forms across differnt counties
+
+```{r, word forms across differnt counties}
+# total number of entries
+nrow(corpus)
+
+# count and percentage of different word forms
+n_per_wf <- corpus |>
+  group_by(word_form) |>
+  count()|>
+  mutate(percentage = n/nrow(corpus)*100)
+print(n_per_wf)
+
+# count and percentage per country
+n_per_country <- corpus |>
+  group_by(country_corpus) |>
+  count()|>
+  mutate(percentage = n/nrow(corpus)*100)
+print(n_per_country)
+
+# word form counts per country
+corpus_wf <- corpus |>
+  group_by(word_form, country_corpus)|>
+  count()|>
+  mutate(percentage = n/nrow(corpus)*100)
+print(corpus_wf)
+
+plot_1 <- ggplot(corpus) +
+  geom_bar(aes(y = word_form,
+               fill = country_corpus),
+           stat = "count")+
+  facet_wrap(~country_corpus)+
+  labs(title = "\n Different word forms found across the different countries",
+       y = "")+
+  scale_fill_manual(values = c("red", "brown4", "gold"),
+                      guide = "none")
+  #geom_text(aes(label = n))+
+  theme_minimal()
+plot_1
+
+ggsave(plot = plot_1, filename = "plot_1_wf_country.png",
+       height = 4, width = 6)
+
+# plotting a figure to visualize how the different word forms are distributed across the three countries
+plot_2 <- ggplot(corpus_wf,aes(y = reorder(word_form, n,
+                                        FUN = function(x) sum(x)),
+                            x = n)) +
+  geom_bar(stat = "identity",
+           aes( fill = country_corpus)) +
+  geom_text(aes(label=n,
+                colour = country_corpus), size = 3, hjust=-0.2)+
+  facet_wrap(~country_corpus)+
+  labs(title = "\n Different word forms found across the different countries",
+       y = "",
+       x = "")+
+  scale_fill_manual(values = c("red", "brown4", "#FF8C00"),
+                      guide = "none")+
+  scale_colour_manual(values = c("#CD6889", "#96CDCD", "peachpuff3"),
+                      guide = "none")+
+  scale_x_continuous(limits = c(0, 200))+
+  #guides(x = guide_axis(angle = 45)) +
+  theme_minimal()
+# looking at plot
+plot_2
+
+# Saving the plot as .png file
+ggsave(plot = plot_2, filename = "plot_2_wf_country.png",
+       height = 4, width = 6)
+
+```
+
+### position and function
+
+```{r, position and function}
+
+# counting the position
+corpus_pos <- corpus |>
+  group_by(free_standing) |>
+  count() |>
+  # adding percentages, rounding to avoid decimals
+  mutate(percentage = round(n/nrow(corpus)*100))
+print(corpus_pos)
+# counting the function
+corpus_fun <- corpus |>
+  group_by(discourse_marker) |>
+  count() |>
+  # adding percentages, rounding to avoid decimals
+  mutate(percentage = round(n/nrow(corpus)*100))
+print(corpus_fun)
+
+
+# counting how 'weisst eh' is positioned by comparing
+# free_standing against discourse_marker
+# position:
+# free_standing:  0 = embedded in a sentence
+#                 1 = sanding completely free as a sentence on its own
+# function: 
+# discourse_marker: 0 = part of the main clause of the sentence,
+#                       not a discourse marker
+#                   1 = used as discourse marker
+corpus_pos_fun <- corpus |>
+  group_by(free_standing, discourse_marker) |>
+  count() |>
+  # adding percentages, rounding to avoid decimals
+  mutate(percentage = round(n/nrow(corpus)*100))
+# looking at results
+print(corpus_pos)
+
+# adding italics to title
+my_title_4 <- expression(paste("Positions and functions of ", italic("weisst eh")))
+# plotting the result
+plot_4 <- ggplot(corpus_pos_fun,
+                 (aes(x = free_standing,
+                      y = n)))+
+  geom_bar(aes(fill = as.factor(discourse_marker)),
+           stat = "identity",
+           position = 'dodge')+
+  geom_text(aes(label = n,
+                colour = as.factor(discourse_marker)),
+            position = 'identity',
+            size = 3.2,
+            vjust=-0.2,
+            hjust= c(2.1, -1.2, 5.0, -4.7))+
+  scale_fill_manual(values = c("#CD919E","#8B636C"),
+                    labels = c("no",
+                               "yes"))+
+    scale_colour_manual(values = c("#CD919E","#8B636C"))+
+  guides(colour = "none")+
+  labs(title = my_title_4,
+       x = "",
+       y = "",
+       fill = "used as discourse marker")+
+  scale_x_continuous(breaks = c(0,1),
+                     labels = c("embedded", "free-standing"))+
+  theme_minimal()
+plot_4
+
+# Saving the plot as .png file
+ggsave(plot = plot_4, filename = "plot_4_position_and_function.png",
+       height = 4, width = 6)
+
+
+```
+
+### funtions across different countries
+```{r, functions across country}
+
+# function across countries
+corpus_func_count <- corpus |>
+  group_by(discourse_marker, country_corpus)|>
+  count()
+print(corpus_func_count)
+
+# creating a new tibble to plot the results in the optimal way
+
+# get total number of results per country 
+print(n_per_country)
+# extracting values and saving them in separate objects
+AT <- c(n_per_country$n[1])
+CH <- c(n_per_country$n[2])
+DE <- c(n_per_country$n[3])
+# repeating this for the other table
+corpus_func_count_n <- c(corpus_func_count$n)
+# using the total values per country and order them so that they fit
+# together with the corpus_func_count_n object that has 5 lines
+total_per_country <- c(n_per_country$n[1],
+          n_per_country$n[2],
+          n_per_country$n[3],
+          n_per_country$n[1],
+          n_per_country$n[3])
+# combining the two objects above into a new data frame/ tibble
+help <- tibble(corpus_func_count_n, total_per_country)
+# calculating percentages per country
+help <- help |>
+  mutate(percentage =
+           (corpus_func_count_n/total_per_country))
+#|>
+  # rounding to avoid decimals
+  #mutate(percentage = round(percentage)) |>
+ # mutate(percentage = )
+
+help$percentage
+
+# for plottin gwe have to creat a new data frame/tibble
+# saving the necessary information in new objects
+percentage_per_country <- help$percentage
+dis_mar <- corpus_func_count$discourse_marker
+country <- corpus_func_count$country_corpus
+n <- corpus_func_count$n
+# combining those objects into a new data frame/tibble
+function_per_country <- tibble(dis_mar,
+                               country,
+                               n,
+                               percentage_per_country)
+# looking at the new df
+print(function_per_country)
+# looks good, then we can plot the results
+
+
+# adding italics to title
+my_title_5 <- expression(paste("Usage of ", italic("weisst eh"), " across different spoken standard varieties"))
+# plotting the results
+plot_5 <- ggplot(function_per_country,
+                 (aes(x = dis_mar,
+                      y = n)))+
+  geom_bar(aes(fill = as.factor(country)),
+           stat = "identity",
+           position = 'dodge')+
+  geom_text(aes(label = scales::percent(percentage_per_country),
+                colour = as.factor(country)),
+            position = 'identity',
+            size = 3.2,
+            vjust=-0.2,
+            hjust= c(1,1,1,1,1))+
+  #facet_wrap(~discourse_marker)+
+  scale_fill_manual(values = c("#CD6889","#96CDCD", "peachpuff3"),
+                    labels = c("AT",
+                               "CH",
+                               "DE"))+
+    scale_colour_manual(values = c("#CD6889","#96CDCD", "peachpuff3", "#CD6889", "peachpuff3"))+
+  guides(colour = "none")+
+  labs(title = my_title_5,
+       x = "",
+       y = "",
+       fill = "standard variety spoken in")+
+  scale_x_continuous(breaks = c(0,1),
+                     labels = c("main clause", "discourse marker"))+
+  theme_minimal()
+plot_5
+
+# Saving the plot as .png file
+ggsave(plot = plot_5, filename = "plot_5_funcion_per_country.png",
+       height = 4, width = 6)
+
+# excluding wikipedia:
+
+# counting how often wikipedia was the source and how that is
+# distributed across the function and country and word form
+wiki <- corpus |>
+  filter(reference == "Wikipedia") |>
+  group_by(discourse_marker, country_corpus, word_form )|>
+  count()
+# only in germany, equally across the two functions
+# How do the results look like when we exclude wikipedia
+no_wiki <- corpus |>
+  filter(reference != "Wikipedia") |>
+  group_by(discourse_marker, country_corpus)|>
+  count()
+# new total of examples when excluding wikipedia (which was n=14)
+DE_new <- DE-14
+print(DE_new)
+# new percentages
+# in main clause:
+print(round(no_wiki$n[3]/DE_new*100,1))
+# as discourse marker
+print(round(no_wiki$n[5]/DE_new*100,1))
+
+```
+
+
+### ja, denn and leicht
+```{r, ja, denn and leicht}
+
+# filtering for particle "ja"
+corpus_ja <- corpus|>
+  filter(ja == 1)
+
+# counting number of examples that had the particle 'ja'
+nrow(corpus_ja)
+
+# together with which words forms did 'ja' appear?
+corpus_ja |>
+  group_by(word_form) |>
+  count()
+# wasst eh and weisst eh
+
+# In which counties did the corpus search yield results for 'ja'?
+corpus_ja |>
+  group_by(country_corpus, word_form) |>
+  count()
+# in all three
+
+# how often was 'ja' used as discourse marker?
+corpus_ja |>
+  group_by(discourse_marker) |>
+  count()
+# never
+
+```
+
+### pronouns
+```{r, pronouns}
+
+# storing total number of discourse markers in an object
+dis_total <- corpus |>
+  filter(discourse_marker == 1)|>
+  nrow()
+# n = 171
+
+# storing total number of "not discourse marker" examples in an object
+no_dis_total <- corpus |>
+  filter(discourse_marker == 0)|>
+  nrow()
+# n = 112
+
+# pronouns and their distribution
+corpus_pro_dis <- corpus |>
+  group_by(with_pronoun, discourse_marker) |>
+  count()
+# looking at results
+print(corpus_pro_dis)
+# order of function is: 0 - 1 - 0 - 1 - 0 - 0 
+
+# calculating percentage per function: discourse marker = yes/no
+# extracting total number of observation into a new object
+corpus_pro_dis_n <- corpus_pro_dis$n
+# ordering total numbers of function fitting to the order of
+# conditions in corpus_pro_dis_n
+total_per_function <- c(no_dis_total, dis_total, no_dis_total, dis_total, no_dis_total, no_dis_total)
+# merge into data frame/tibble
+help_2 <- tibble(corpus_pro_dis_n, total_per_function)
+
+# calculate percentages:
+help_2 <- help_2 |>
+  mutate(percentage = corpus_pro_dis_n/total_per_function,
+         rounded = round(percentage*100))
+# look at result
+print(help_2)
+```
+
+
+### conjunctions
+```{r, conjunctions}
+
+# how many of total examples have a conjunction right 
+# before 'weisst eh' ?
+corpus_conj <- corpus |>
+  group_by(with_conjunction) |>
+  count() |>
+  # adding percentage
+  mutate(percentage = round((n/nrow(corpus)*100),1))
+print(corpus_conj)
+
+# filtering data to only include those examples where 'weisst eh'
+# functions as a discourse marker
+dismark <- corpus |>
+  filter(discourse_marker ==1)
+
+# looking at discourse markers only
+dismark_conj <- dismark |>
+  group_by(with_conjunction) |>
+  count() |>
+  mutate(percentage = round((n/nrow(dismark))*100, 1))
+print(dismark_conj)
+
+# where is the conjunction placed?
+dismark_conj_type <- dismark |>
+  group_by(with_conjunction, conjunction)|>
+  count()
+print(dismark_conj_type)
+
+# comma placement
+dismark_conj_type_comma <- dismark |>
+  group_by(with_conjunction, conjunction, comma)|>
+  count()
+print(dismark_conj_type_comma)
+
+
+```
+
+### discourse markers in detail
+```{r, discourse markers}
+
+# filtering out free-standing examples
+dismark_emb <- dismark |>
+  filter(free_standing == 0)
+
+nrow(dismark_emb)
+# 167 examples 
+
+# position with the sentence
+dismark_emb_sent <- dismark_emb |>
+  group_by(sentence_position)|>
+  count() |>
+  # adding percentage
+  mutate(percentage = round(n/nrow(dismark_emb)*100))
+print(dismark_emb_sent)
+
+# position within clause for sentence middle position
+dismark_emb_clause <- dismark_emb |>
+  # filtering to only use sentence middle examples
+  filter(sentence_position == "middle") |>
+  group_by(clause_position) |>
+  count()
+print(dismark_emb_clause)
+# conjunction distribution across different positions
+dismark_emb_combination_conj <- dismark_emb |>
+  group_by(sentence_position, clause_position, with_conjunction)|>
+  summarize()
+print(dismark_emb_combination_conj)
+# pronoun distribution across different positions
+dismark_emb_combination_pro <- dismark_emb |>
+  group_by(sentence_position, clause_position, with_pronoun)|>
+  summarize()
+print(dismark_emb_combination_pro)
+
+```
+
+
+
+```{r}
+explore <- dismark_emb |>
+  group_by(conjunction, comments) |>
+  summarize()
+print(explore)
+
+```
+
+
+
+
+
+
+# Exploratory study - Questionnaire
+
+## loading data 
+
+```{r, plots and tables}
+# adding italics to title
+my_title_5 <- expression(paste("Usage of ", italic("weisst eh"), " across different spoken standard varieties"))
+# plotting the results
+plot_5 <- ggplot(corpus_func_count,
+                 (aes(x = discourse_marker,
+                      y = n)))+
+  geom_bar(aes(fill = as.factor(country_corpus)),
+           stat = "identity",
+           position = 'dodge')+
+  geom_text(aes(label = n,
+                colour = as.factor(discourse_marker)),
+            position = 'identity',
+            size = 3.2,
+            vjust=-0.2,
+            hjust= c(4.35,0.6,-3.35,2.45,-2.5))+
+  #facet_wrap(~discourse_marker)+
+  scale_fill_manual(values = c("#CD6889","#96CDCD", "peachpuff3"),
+                    labels = c("AT",
+                               "CH",
+                               "DE"))+
+    scale_colour_manual(values = c("#CD6889","#96CDCD", "peachpuff3", "#CD6889", "peachpuff3"))+
+  guides(colour = "none")+
+  labs(title = my_title_5,
+       x = "",
+       y = "",
+       fill = "standard variety spoken in")+
+  scale_x_continuous(breaks = c(0,1),
+                     labels = c("main clause", "discourse marker"))+
+  theme_minimal()
+plot_5
+
+
+corpus_func_count|>
+  mutate(percentage_per_country = percentage_per_country)
+print(corpus_func_count)
+```
+
+## analysis
+
+## plotting 
+
+# DELEATE!!!
+code junks that I might want t use, but most probably wont need anymore
+```{r}
+#? kan slettes
+corpus |> filter(discourse_marker == 0) |> group_by(with_conjunction) |> count()
+
+corp <- read_delim('correct_spelling.txt', delim = '\t')
+# word form counts per country
+corp_wf <- corp |>
+  group_by(word_form, country_corpus)|>
+  count()
+corp
+print(corp_wf)
+
+plot_1 <- ggplot(corpus_wf) +
+  geom_(aes(y = word_form,
+               fill = country_corpus,))+
+  labs(title = "\n Different word forms found across the different countries",
+       y = "")+
+  theme_minimal()
+plot_1
+
+,
+       y = c( "waßt eh", "waßt ja eh", "weißt eh", "weißt ja eh", "weisst eh", "weisst ja eh", "wissen's eh", "wisst's eh", "woaßt eh", "woaßt ja eh")
+              
+# adjusting levels of word_form column
+corpus_reo <- as.character(corpus$word_form,
+                       levels = c("weisst eh", "wasst eh", "woasst eh", "wisst's eh", "wissen's eh"))
+
+# adjusting columns for analysis
+corpus_adj <- corpus_raw |>
+  mutate(
+    word_form =
+      ifelse(
+        original_word_form == "wa<df>t eh"~"wasst eh",
+        "wa<df>t ja eh"~"wasst eh",
+        "weisst eh"~"weisst eh",
+        "weisst ja eh"~"weisst eh",
+        "wei<df>t eh"~"weisst eh",
+        "wei<df>t ja eh"~"weisst eh",
+        "wissen's eh" ~"wissen's eh",
+        "wisst's eh"~"wisst's eh",
+        "woasst eh"~"woasst eh",
+        "woa<df>t eh"~"woasst eh"))
+    complete_word_form_adjusted =
+      ifelse(
+        original_word_form == "wa<df>t eh"~"wabt eh",
+        "wa<df>t ja eh"~"wabt ja eh",
+        "weisst eh"~"weisst eh",
+        "weisst ja eh"~"weisst ja eh",
+        "wei<df>t eh"~"weibt eh",
+        "wei<df>t ja eh"~"weibt ja eh",
+        "wissen's eh" ~"wissen's eh",
+        "wisst's eh"~"wisst's eh",
+        "woasst eh"~"woasst eh",
+        "woa<df>t eh"~"woabt eh"),
+    ja =
+      ifelse(
+        original_word_form == "wa<df>t eh"~0,
+        "wa<df>t ja eh"~1,
+        "weisst eh"~0,
+        "weisst ja eh"~1,
+        "wei<df>t eh"~0,
+        "wei<df>t ja eh"~1,
+        "wissen's eh" ~0,
+        "wisst's eh"~0,
+        "woasst eh"~0,
+        "woa<df>t eh"~0)
+      )
+```
+```{r, copy of above in case i need it}
+# counting how 'weisst eh' is positioned by comparing
+# free_standing against discourse_marker
+
+# free_standing:  0 = embedded in a sentence
+#                 1 = sanding completely free as a sentence on its own
+# discourse_marker: 0 = part of the main clause of the sentence,
+#                       not a discourse marker
+#                   1 = used as discourse marker
+corpus_pos <- corpus |>
+  group_by(free_standing, discourse_marker) |>
+  count() |>
+  # adding percentages, rounding to avoid decimals
+  mutate(percentage = round(n/nrow(corpus)*100))
+# looking at results
+print(corpus_pos)
+
+# create a new column that combines free_standing and discourse_marker
+corpus_pos <- corpus_pos |>
+  mutate(comb_free_disk = case_when(free_standing == 0 &
+                                  discourse_marker == 0 ~ "00",
+                                free_standing == 0 &
+                                  discourse_marker == 1 ~ "01",
+                                free_standing == 1 &
+                                  discourse_marker == 0 ~ "10",
+                                free_standing == 1 &
+                                  discourse_marker == 1 ~ "11",
+                                )) |>
+  mutate(position = case_when(free_standing == 0 ~ "embedded",
+                                   free_standing == 1 ~"free standing"))
+
+  # removing columns we don't need
+#corpus_pos <- corpus_pos |> select(-free_standing, -discourse_marker)
+# looking at result
+corpus_pos
+
+# plotting the result
+plot_3 <- ggplot(corpus_pos,
+                 aes(x = "",
+                     y = n,
+                     fill = comb_free_disk))+
+  geom_col()+
+  geom_text(aes(label = n),
+            position = position_stack(vjust = 0.6))+
+  coord_polar(theta = "y")+
+  scale_fill_manual(values =c ("#8B7D7B","#EED5D2","#AEEEEE",  "#96CDCD"))+
+  theme_void()
+plot_3
+
+corpus_pos <- corpu
+plot_4 <- ggplot(corpus_pos,
+                 (aes(x = free_standing,
+                      y = n)))+
+  geom_bar(aes(fill = as.factor(discourse_marker)),
+           stat = "identity",
+           position = 'dodge')+
+  geom_text(aes(label = n),
+                #colour = as.factor(discourse_marker)),
+            position = 'identity', size = 3, vjust=-0.2,
+            guide = "none")+
+  scale_fill_manual(values = c("#CD919E","#8B636C"),
+                    labels = c("no",
+                               "yes"))+
+    scale_colour_manual(values = c("#CD919E","#8B636C"))+
+  labs(title = "Positions and functions of 'weisst eh' ",
+       x = "",
+       y = "",
+       fill = "used as discourse marker")+
+  scale_x_continuous(breaks = c(0,1),
+                     labels = c("embedded", "free standing"))+
+  theme_minimal()
+plot_4
+
+# fix the numbers
+
+
+
+
+"#AEEEEE",  "#96CDCD"
+```
+### destriptive statistics III copy
+```{r, descriptive statistics III copy}
+
+# position and function across countries
+corpus_pos_func_count <- corpus |>
+  group_by(free_standing, discourse_marker, country_corpus)|>
+  count()
+
+print(corpus_pos_func_count)
+
+
+plot_5 <- ggplot(corpus_pos_func_count,
+                 (aes(x = free_standing,
+                      y = n)))+
+  geom_bar(aes(fill = as.factor(country_corpus)),
+           stat = "identity",
+           position = 'dodge')+
+  geom_text(aes(label = n,
+                colour = as.factor(discourse_marker)),
+            position = 'identity',
+            size = 3.2,
+            vjust=-0.2,
+            hjust= c(1))+
+  facet_wrap(~discourse_marker)+
+  scale_fill_manual(values = c("#CD6889","#96CDCD", "peachpuff3"),
+                    labels = c("AT",
+                               "CH",
+                               "DE"))+
+    scale_colour_manual(values = c("#CD6889","#96CDCD", "peachpuff3"))+
+  guides(colour = "none")+
+  labs(title = my_title,
+       x = "",
+       y = "",
+       fill = "used as discourse marker")+
+  scale_x_continuous(breaks = c(0,1),
+                     labels = c("embedded", "free-standing"))+
+  theme_minimal()
+plot_5
+```
